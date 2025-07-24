@@ -1,0 +1,65 @@
+- name: Configurar OSPFv3 vía RESTCONF
+  hosts: all
+  gather_facts: no
+  vars:
+    process_id: 1
+    area_id: 0
+
+  tasks:
+  - name: Crear proceso OSPFv3 y router-id
+    uri:
+      url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/router"
+      method: PATCH
+      user: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+      force_basic_auth: yes
+      body_format: json
+      headers:
+        Accept: application/yang-data+json
+        Content-Type: application/yang-data+json
+      body:
+        Cisco-IOS-XE-native:router:
+          Cisco-IOS-XE-ospfv3:ospfv3:
+            process-id:
+              - id: "{{ process_id }}"
+                router-id: "{{ (inventory_hostname == 'R1') | ternary('1.1.1.1','2.2.2.2') }}"
+      validate_certs: no
+
+  - name: Asociar Gi2 al área 0
+    uri:
+      url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2"
+      method: PATCH
+      user: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+      force_basic_auth: yes
+      body_format: json
+      headers:
+        Accept: application/yang-data+json
+        Content-Type: application/yang-data+json
+      body:
+        Cisco-IOS-XE-native:GigabitEthernet:
+          name: 2
+          ipv6:
+            address:
+              prefix-list:
+                - prefix: "{{ (inventory_hostname == 'R1') | ternary('2001:db8:12::1/64','2001:db8:12::2/64') }}"
+            ospfv3:
+              processes:
+                id:
+                  - id: "{{ process_id }}"
+                    area: "{{ area_id }}"
+      validate_certs: no
+
+  - name: Consultar vecinos OSPFv3
+    uri:
+      url: "https://{{ ansible_host }}/restconf/data/ietf-routing:routing/control-plane-protocols/control-plane-protocol=ospfv3,{{ process_id }}/ospfv3-state/neighbors"
+      method: GET
+      user: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+      headers:
+        Accept: application/yang-data+json
+      validate_certs: no
+    register: ospf_neighbors
+
+  - debug:
+      msg: "{{ ospf_neighbors.json }}"
