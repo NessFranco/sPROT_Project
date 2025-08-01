@@ -1,0 +1,53 @@
+- name: Verificar configuración OSPFv3 y la interfaz en routers Cisco
+  hosts: routers
+  gather_facts: no
+  vars:
+    router_process_url: "/restconf/data/Cisco-IOS-XE-native:native/router/ospfv3=1"
+    gig2_url: "/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2"
+  tasks:
+
+    - name: Verificar existencia del proceso OSPFv3
+      uri:
+        url: "https://{{ ansible_host }}{{ router_process_url }}"
+        method: GET
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+        return_content: yes
+      register: ospf_response
+
+    - name: Mostrar router-id del proceso OSPFv3
+      debug:
+        msg: "Router-ID: {{ ospf_response.json['Cisco-IOS-XE-ospfv3:ospfv3']['router-id'] }}"
+      when: ospf_response.status == 200
+
+    - name: Verificar configuración de la interfaz GigabitEthernet2
+      uri:
+        url: "https://{{ ansible_host }}{{ gig2_url }}"
+        method: GET
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+        return_content: yes
+      register: gig2_response
+
+    - name: Mostrar configuración de OSPFv3 en interfaz (si existe)
+      debug:
+        msg: |
+          Interfaz configurada para:
+          - Área: {{ gig2_response.json['Cisco-IOS-XE-native:GigabitEthernet']['ospfv3']['ospfv3'][0]['address-family']['ipv6']['area'] }}
+          - Proceso: {{ gig2_response.json['Cisco-IOS-XE-native:GigabitEthernet']['ospfv3']['ospfv3'][0]['process-id'] }}
+      when:
+        - gig2_response.status == 200
+        - "'ospfv3' in gig2_response.json['Cisco-IOS-XE-native:GigabitEthernet']"
+
+    - name: Verificar si hay configuración IPv6 (presencia de bloque ipv6)
+      debug:
+        msg: >
+          La interfaz tiene configuración IPv6: 
+          {{ 'ipv6' in gig2_response.json['Cisco-IOS-XE-native:GigabitEthernet'] }}
+      when: gig2_response.status == 200
