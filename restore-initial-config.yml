@@ -1,0 +1,90 @@
+---
+- name: Restaurar configuración inicial de routers
+  hosts: routers
+  gather_facts: no
+  vars:
+    gig2_ipv6:
+      R1: "2001:db8:1::1/64"
+      R2: "2001:db8:1::2/64"
+    gig2_desc:
+      R1: "Enlace directo a R2 (IPv6)"
+      R2: "Enlace directo a R1 (IPv6)"
+  tasks:
+    # Eliminar configuración OSPFv3 de la interfaz
+    - name: Eliminar OSPFv3 de GigabitEthernet2
+      uri:
+        url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2/ospfv3"
+        method: DELETE
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+        status_code: [200, 204, 404]
+      ignore_errors: yes
+
+    # Eliminar proceso OSPFv3
+    - name: Eliminar proceso OSPFv3
+      uri:
+        url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/router/ospfv3=1"
+        method: DELETE
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+        status_code: [200, 204, 404]
+      ignore_errors: yes
+
+    # Restaurar configuración inicial de GigabitEthernet2
+    - name: Restaurar interfaz GigabitEthernet2
+      uri:
+        url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2"
+        method: PATCH
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Content-Type: "application/yang-data+json"
+          Accept: "application/yang-data+json"
+        body_format: json
+        body:
+          Cisco-IOS-XE-native:GigabitEthernet:
+            description: "{{ gig2_desc[inventory_hostname] }}"
+            ipv6:
+              address:
+                prefix-list:
+                  - prefix: "{{ gig2_ipv6[inventory_hostname] }}"
+        validate_certs: no
+        status_code: [200, 204]
+      ignore_errors: yes
+
+    # Activar la interfaz (no shutdown)
+    - name: Activar interfaz GigabitEthernet2
+      uri:
+        url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2/shutdown"
+        method: DELETE
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+        status_code: [200, 204, 404]
+      ignore_errors: yes
+
+    # Verificar que la interfaz está configurada correctamente
+    - name: Verificar configuración de GigabitEthernet2
+      uri:
+        url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2"
+        method: GET
+        user: "{{ ansible_user }}"
+        password: "{{ ansible_password }}"
+        headers:
+          Accept: "application/yang-data+json"
+        validate_certs: no
+      register: interface_config
+      ignore_errors: yes
+
+    - name: Mostrar configuración final
+      debug:
+        var: interface_config.json
+      when: interface_config.status == 200
