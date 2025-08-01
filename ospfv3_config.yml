@@ -1,5 +1,5 @@
 ---
-- name: Configurar OSPFv3 en routers Cisco (versión final)
+- name: Configurar OSPFv3 en routers Cisco
   hosts: routers
   gather_facts: no
   vars:
@@ -64,7 +64,7 @@
         validate_certs: no
         status_code: [200, 204]
 
-    # Verificación (opcional)
+    # Verificación
     - name: Verificar configuración de interfaz
       uri:
         url: "https://{{ ansible_host }}/restconf/data/Cisco-IOS-XE-native:native/interface/GigabitEthernet=2"
